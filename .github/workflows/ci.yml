@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Typecheck, unit tests for the evaluation checks, and plugin/skill validation.
+      # Live agent runs need a signed-in Claude Code CLI, so they run manually (see evals/agent/README.md).
+      - run: npm run check

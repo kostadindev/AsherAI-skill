@@ -1,3 +1,4 @@
-evals/runs/latest/
+node_modules/
 .DS_Store
+# Raw `claude -p` streams carry local paths and session metadata; only the scrubbed .md transcripts are published.
 evals/agent/results/**/*.jsonl

@@ -1,0 +1,24 @@
+{
+  "name": "trialrun-skill",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude skill that coaches AI-literacy habits while you work with AI, plus its evaluation harness.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "validate": "tsx scripts/validate-plugin.ts",
+    "check": "npm run typecheck && npm test && npm run validate",
+    "agent": "tsx evals/agent/harness.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
