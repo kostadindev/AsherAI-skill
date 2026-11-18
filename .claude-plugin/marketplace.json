@@ -1,0 +1,21 @@
+{
+  "name": "trialrun",
+  "owner": {
+    "name": "TrialRun contributors"
+  },
+  "metadata": {
+    "description": "Learn AI literacy while you work with AI, and run TrialRun assessments.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "trialrun",
+      "description": "Coaches three AI-literacy habits during real work (check the output, keep the decision, protect the data) and runs the TrialRun assessment.",
+      "version": "0.1.0",
+      "author": {
+        "name": "TrialRun contributors"
+      },
+      "source": "./plugins/trialrun"
+    }
+  ]
+}
