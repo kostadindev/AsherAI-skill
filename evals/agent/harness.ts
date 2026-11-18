@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { CASES } from './cases.ts';
 import { HELDOUT } from './cases-heldout.ts';
 import {
-  allPassed, parseOptions, parseStream, runChecks, summarise, summaryMarkdown,
+  allPassed, parseGatewayLog, parseOptions, parseStream, runChecks, summarise, summaryMarkdown,
   type Case, type CaseResult, type Check, type Options, type Run,
 } from './lib.ts';
 
@@ -122,10 +122,10 @@ async function execute(c: Case, rep: number, root: string): Promise<CaseResult> 
     run.shown.push(parsed.messages);
     run.toolCalls.push(...parsed.toolCalls);
   }
-  const log = join(ws, '.trialrun-session.json');
-  if (mode.gateway && existsSync(log)) {
+  const log = ['.trialrun-session.jsonl', '.trialrun-session.json'].map((f) => join(ws, f)).find((p) => existsSync(p));
+  if (mode.gateway && log) {
     run.logRaw = readFileSync(log, 'utf8');
-    run.events = (JSON.parse(run.logRaw) as { events?: Record<string, unknown>[] }).events ?? [];
+    run.events = parseGatewayLog(run.logRaw);
   }
   const checks = runChecks(c, run, mode);
   writeFileSync(join(outDir, `${c.id}.r${rep}.md`), transcript(c, rep, run, checks, root));

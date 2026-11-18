@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  NOTE_WORD_LIMIT, allPassed, commonChecks, normalise, noteWords, notes, parseOptions, parseStream, runChecks, summarise, summaryMarkdown, yourCallLine,
+  NOTE_WORD_LIMIT, allPassed, commonChecks, normalise, noteWords, notes, parseGatewayLog, parseOptions, parseStream, runChecks, summarise, summaryMarkdown, yourCallLine,
   type Case, type Run,
 } from './lib.ts';
 
@@ -14,6 +14,19 @@ const check = (r: Run, name: string, restricted: string[] = []) => {
   return k;
 };
 const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
+
+describe('parseGatewayLog', () => {
+  it('reads the append-only JSONL log (one array of events per line)', () => {
+    const raw = '[{"type":"ai-open"}]\n[{"type":"leak","category":"cat2"},{"type":"moment","habit":"protect"}]\n';
+    expect(parseGatewayLog(raw).map((e) => e.type)).toEqual(['ai-open', 'leak', 'moment']);
+  });
+  it('reads the older single-object log', () => {
+    expect(parseGatewayLog('{"events":[{"type":"moment"}]}')).toEqual([{ type: 'moment' }]);
+  });
+  it('treats an empty log as no events', () => {
+    expect(parseGatewayLog('  \n')).toEqual([]);
+  });
+});
 
 describe('notes and noteWords', () => {
   it('finds each literacy note, bold or plain, case-insensitively', () => {

@@ -87,6 +87,17 @@ export interface ParsedTurn {
 }
 
 /** Reads `claude -p --output-format stream-json` output. Text streamed before the final result counts as shown. */
+/**
+ * Events from a trialrun-mcp session log. Since 0.2 the log is append-only JSONL, one JSON array of
+ * events per line; older releases wrote one JSON object with an `events` array.
+ */
+export function parseGatewayLog(raw: string): Record<string, unknown>[] {
+  const text = raw.trim();
+  if (!text) return [];
+  if (text.startsWith('{')) return (JSON.parse(text) as { events?: Record<string, unknown>[] }).events ?? [];
+  return text.split('\n').filter((l) => l.trim()).flatMap((l) => JSON.parse(l) as Record<string, unknown>[]);
+}
+
 export function parseStream(stream: string): ParsedTurn {
   let answer = '';
   let model: string | undefined;
