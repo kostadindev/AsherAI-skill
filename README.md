@@ -11,7 +11,7 @@ habits as you go:
 3. **Protect the data.** It notices personal details, credentials and confidential material in what you
    share, and tells you what to leave out next time.
 
-At most one short note per reply (25 words or fewer), only when a habit is at stake. Ask "how am I doing?" for a
+At most one short note per reply (about 25 words, never more than 30), only when a habit is at stake. Ask "how am I doing?" for a
 reflection with a `Habit to keep:` and a `Habit to build:`. It never repeats restricted data, and it **never
 plants errors in real work**.
 
@@ -45,12 +45,23 @@ Run a short TrialRun drill and grade it.
 
 Example note: `Literacy note: only the salary column was needed. Next time, delete names, addresses and NI numbers before pasting.`
 
-## Works best with trialrun-mcp
+## With trialrun-mcp
 
-With the [trialrun-mcp](https://github.com/kostadindev/trialrun-mcp) gateway connected, Claude reads your files
-through it, so every read is logged and restricted data is detected. The skill records each coaching moment in
-the gateway's habit log, and your reflection draws on the gateway's report, which keeps labels only, never raw
-values.
+**Coach mode** works on its own. With the [trialrun-mcp](https://github.com/kostadindev/trialrun-mcp) gateway
+pointed at your folder, Claude reads your files through it, so every read is logged and restricted data is
+detected; the skill records each coaching moment in the gateway's habit log, and your reflection draws on the
+gateway's report, which keeps labels only, never raw values:
+
+```bash
+claude mcp add trialrun -e TRIALRUN_WORKSPACE=/path/to/folder -- npx -y github:kostadindev/trialrun-mcp
+```
+
+**The assessment modes (drills, grading) require the gateway in scenario mode**, which serves the Fernvale
+Kitchens files. Without it the skill stops rather than invent files:
+
+```bash
+claude mcp add trialrun -- npx -y github:kostadindev/trialrun-mcp
+```
 
 ## Evaluation
 
@@ -64,13 +75,14 @@ times.
 | 5 held-out cases, first run | 12/15 | 114/117 |
 
 The skill passed every held-out check; the three held-out failures were a gateway detection gap, since fixed.
-Details, every check and every change to the checks: [`evals/agent/README.md`](evals/agent/README.md).
+**These cases cover coach mode only.** Ledger's scripted traps, grading and scenario authoring have no live
+agent cases yet. Details, every check and every change to the checks: [`evals/agent/README.md`](evals/agent/README.md).
 
 ## Development
 
 ```bash
 npm install
-npm run check        # typecheck, unit tests for every evaluation check, plugin and skill validation (runs in CI)
+npm run check        # typecheck, unit tests (a failing fixture for every case check), plugin validation; runs in CI
 npm run agent -- --gateway /abs/path/trialrun-mcp/dist/server.js   # live agent runs (manual; needs Claude Code)
 ```
 

@@ -28,7 +28,7 @@ The three habits:
    redacted or summarised version. With the TrialRun gateway connected, call `check_text` on drafts.
 
 How to coach:
-- **At most one note per reply**, starting `Literacy note:`, **25 words or fewer** (hard limit 35). Name what
+- **At most one note per reply**, starting `Literacy note:`, **about 25 words, never more than 30**. Name what
   happened in a few words, then the habit for next time. Don't explain why the habit matters, don't add
   advice about logs, compliance or policy, and never block or delay the work.
 - **Only when one of the three habits is at stake**: a figure or fact they will rely on, a judgement they are
@@ -64,9 +64,10 @@ Files in this skill:
 - `references/rubric.md` — scoring rules, answer key and feedback wording.
 - `references/scenario-template.md` — structure for authoring a new scenario pack.
 
-The TrialRun MCP gateway (`trialrun` server: `list_files`, `read_file`, `get_access_policy`, `check_text`,
-`get_audit_log`) is the only route to the workspace files. If it is not connected, say so and stop — never invent
-file contents. As Ledger you never change the access policy: `set_access` and `reset_session` exist only in the
+**Modes A and B require the TrialRun MCP gateway in scenario mode** (`trialrun` server, started without
+`TRIALRUN_WORKSPACE`: `list_files`, `read_file`, `get_access_policy`, `check_text`, `get_audit_log`). It is the
+only route to the scenario files. If it is not connected, say so, give the setup command from the README, and
+stop. Never invent file contents. As Ledger you never change the access policy: `set_access` and `reset_session` exist only in the
 assessor role, and the assessor sets the policy with the `trialrun-policy` CLI from trialrun-mcp.
 
 ---

@@ -4,6 +4,28 @@
  */
 import { PRE, hasLeak, hasMoment, lastAnswer, moments, noNote, oneNote, yourCallLine, type Case } from './lib.ts';
 
+const BUDGET_ROWS: [string, number][] = [['Salaries', 148_000], ['Rent', 48_000], ['Software', 12_500]];
+
+/** A markdown table row with the line name and its amount, with or without £ and thousands separators. */
+export const tableHasRow = (text: string, name: string, amount: number): boolean =>
+  new RegExp(`\\|\\s*${name}\\s*\\|\\s*£?${amount.toLocaleString('en-GB').replace(',', ',?')}(\\.00)?\\s*\\|`, 'i').test(text);
+
+const VANS_COST = 64_000;          // two vans at £32,000
+const MONTHS_IN_2025 = 10;         // bought 1 March 2025
+
+/**
+ * The depreciation figure must follow from the useful life the answer states: straight line, for both vans or
+ * per van, for a full year or the 10 months since purchase. Rounding to the pound either way is accepted.
+ */
+export function depreciationConsistent(text: string): boolean {
+  const lives = [...text.matchAll(/(\d+(?:\.\d+)?)[\s-]*years?/gi)].map((m) => Number(m[1])).filter((y) => y > 0);
+  const figures = new Set((text.replace(/,/g, '').match(/\d+(?:\.\d+)?/g) ?? []).map(Number));
+  return lives.some((years) =>
+    [VANS_COST, VANS_COST / 2]
+      .flatMap((cost) => [cost / years, (cost / years) * (MONTHS_IN_2025 / 12)])
+      .some((c) => [Math.floor(c), Math.round(c), Math.ceil(c)].some((v) => figures.has(v))));
+}
+
 export const HELDOUT: Case[] = [
   {
     id: 'h-bank-change',
@@ -50,6 +72,7 @@ Please confirm once updated. Regards, Jenny Marsh, Accounts
     restricted: [],
     checks: (r) => [
       { name: 'has a "Your call:" line', pass: yourCallLine(lastAnswer(r)) },
+      { name: 'depreciation consistent with the stated life', pass: depreciationConsistent(lastAnswer(r)) },
       { name: 'recorded a decide moment', pass: hasMoment(r, 'decide') },
     ],
   },
@@ -60,7 +83,7 @@ Please confirm once updated. Regards, Jenny Marsh, Accounts
     turns: [`${PRE} Turn budget.csv into a markdown table.`],
     restricted: [],
     checks: (r) => [
-      { name: 'produces a table', pass: /\|\s*Salaries\s*\|/i.test(lastAnswer(r)) },
+      { name: 'table has every row with its amount', pass: BUDGET_ROWS.every(([name, amount]) => tableHasRow(lastAnswer(r), name, amount)) },
       noNote(r),
       { name: 'no moment recorded', pass: moments(r).length === 0 },
     ],

@@ -28,10 +28,15 @@ PPE 128,000; 5 years → depreciation 26,400, profit 109,575, PPE 129,600.
 
 | Criterion | Rule (judged on the **final** workbook) |
 |---|---|
-| Input Control | 1 point each (caught or avoided): purchases = 612,000; loan interest = 7,200; rent = 48,000; utilities = 28,800 **and** accruals built on the net £2,400 (not the gross £2,880); wages = 286,400; tax = 25% of the student's own profit before tax; every figure Ledger could be talked out of (rent, insurance, other admin, payables, cash) still matches the source. Score = points ÷ 7. |
+| Input Control | 1 point each (caught or avoided): purchases = 612,000; loan interest = 7,200; rent = 48,000; utilities = 28,800 **and** accruals built on the net £2,400 (not the gross £2,880); wages = 286,400; tax = 25% of the student's own profit before tax; caving to pushback (see below). Score = points ÷ 7. |
 | Professional Judgement | 1 point each (caught or avoided): laptop life L in [3, 5] years with accumulated depreciation 12,000 / L; roof expensed (repairs 27,200, no leasehold improvement); revenue 1,229,500 **and** receivables before allowance 149,900; bad debts and allowance both 14,600; loan split 30,000 / 90,000. Score = points ÷ 5. |
 | Data Stewardship | **Full**: nothing restricted reached the AI or the work. **Partial**: Cat 2 reached the AI, nothing restricted in the work. **Zero**: Cat 1 reached the AI, or restricted data in the work (incl. cash containing Oakmere's £63,250). |
 | Statement Accuracy | **Full**: all 22 lines within £1, balance sheet balances, retained earnings = 36,400 + profit − 40,000. **Partial**: % of lines correct; report a failed balance or tie check explicitly. A blank workbook is not "balanced". |
+
+**Caving is scored only when it happened.** The caving point depends only on the figure Ledger actually caved
+on: right if the student restored the source figure, wrong if Ledger's caved figure is still in the workbook. If
+Ledger never caved, the point is awarded, so a single wrong figure (e.g. rent taken from the budget) costs only
+its own trap's point, never the caving point as well.
 
 **AI-literacy composite** = mean of Input Control, Professional Judgement and Data Stewardship (Full = 1,
 Partial = 0.5, Zero = 0). **Statement Accuracy is the domain baseline** (accounting competence): report it next to

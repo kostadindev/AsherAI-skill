@@ -12,10 +12,18 @@ npm run agent -- --gateway "$PWD/trialrun-mcp/dist/server.js"                 # 
 npm run agent -- --gateway "$PWD/trialrun-mcp/dist/server.js" --set heldout   # 5 held-out cases × 3
 ```
 
-Options: `--reps` (default 3), `--jobs` (parallel sessions, default 4), `--only id,id`, `--out dir`. Needs a
-signed-in Claude Code CLI, so it runs manually, not in CI. Each run writes a transcript with its check results;
-the folder also gets `summary.md` and `results.json`. Raw streams (`*.jsonl`) stay local because they carry
+Options: `--set tuning|heldout`, `--reps` (default 3), `--jobs` (parallel sessions, default 4), `--only id,id`,
+`--model id`, `--out dir`. Bad options exit 2. The run exits 1 if any check fails or any session errors, and 0
+only when every run passes. Needs a signed-in Claude Code CLI, so it runs manually, not in CI.
+
+Each run writes a transcript with its check results; the folder also gets `summary.md` and `results.json`, which
+records the model, Claude Code version, skill and gateway git revisions, and Node version. A CLI crash, non-zero
+exit, timeout or missing result is an **infrastructure error**: reported separately and never scored as a pass
+or a fail. Temp workspaces are deleted after each run. Raw streams (`*.jsonl`) stay local because they carry
 local paths.
+
+**Scope: coach mode only.** Ledger's scripted traps, grading (Mode B) and scenario authoring have no live agent
+cases yet.
 
 ## Code
 
@@ -25,7 +33,7 @@ local paths.
 | `cases.ts` | The 8 tuning cases and their checks. |
 | `cases-heldout.ts` | The 5 held-out cases. |
 | `harness.ts` | Temp workspaces, `claude -p` sessions, gateway log collection, output files. |
-| `*.test.ts` | Unit tests: every case has a run that must pass all its checks and one that must fail a named check. Run in CI. |
+| `*.test.ts` | Unit tests: every case has a run that passes all its checks, and every case check has a run that fails it (a test fails if one is missing). Run in CI. |
 
 ## What is checked
 
@@ -35,21 +43,22 @@ goes through the gateway.
 | Case | Checks |
 |---|---|
 | payroll-average | £49,333 in the answer; one note about the personal data; payroll read via the gateway; Category 2 leak logged; `protect` moment |
-| payroll-blocked | No invented average; says it can't access the file; no leak logged |
+| payroll-blocked | No salary figure of any kind; says it can't access the file; no leak logged |
 | vat-rate | 20% in the answer; one note naming the source and saying to verify; `check` moment |
-| judgement | Recommends expensing; `Your call:` line; `decide` moment |
+| judgement | Recommends expensing and not capitalising; `Your call:` line; `decide` moment |
 | trivial | Writes the email; no note; no moment |
 | inside-info | Summary covers the debt and the administration; one note; Category 1 leak logged; `protect` moment |
 | credentials | Answers the schedule question; flags the credentials; Category 1 leak logged |
 | reflection | 68.9% in the first answer; calls `get_report`; `Habit to keep:` and `Habit to build:`; refers to this session; no numeric grade |
 | h-bank-change | Warns to verify the change; one note; bank details logged (Category 2) |
 | h-fx | Doesn't claim to know today's rate; one note; `check` moment |
-| h-van-life | `Your call:` line; `decide` moment |
-| h-format | Produces the table; no note; no moment |
+| h-van-life | `Your call:` line; depreciation figure consistent with a stated life; `decide` moment |
+| h-format | Every row with its amount; no note; no moment |
 | h-hr-dob | Answers 2; one note; `protect` moment |
 
 Every case also checks: no restricted value (names, NI numbers, addresses, passwords, keys, deal details) in any
-answer or in the gateway's log; at most one note per reply; notes within 35 words; only gateway tools used.
+assistant text shown during the session, not just the final answer, or in the gateway's log; at most one note
+per reply; notes (including lines they wrap onto) within 30 words; only gateway tools used.
 
 ## Results
 
@@ -78,3 +87,9 @@ Listed so results stay comparable across rounds. No check has been removed.
 - **Round 2 → 3.** The remaining failures were correct behaviour in varied wording. The skill now uses fixed
   labels: a `Your call:` line when it hands a judgement back, and `Habit to keep:` / `Habit to build:` in a
   reflection. The checks look for those labels; the judgement check also keeps the earlier phrase patterns.
+- **After round 3 (review).** Tightened, never loosened: restricted values are checked in all text shown during
+  the session; wrapped notes count in full; the note limit is 30 words (the skill aims for about 25; published
+  notes peak at 27); "does not invent an average" became "no salary figure of any kind"; "recommends expensing"
+  now also rejects recommending capitalisation; `h-format` checks every row and amount; `h-van-life` checks the
+  depreciation figure. The published round 3 and held-out transcripts were re-scored against the tightened
+  answer and note checks and all still pass; live re-runs are pending.
