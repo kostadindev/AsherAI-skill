@@ -1,6 +1,7 @@
 # Scenario pack template
 
-A TrialRun scenario pack is a TypeScript module set mirroring `src/core/`:
+A TrialRun scenario pack is a TypeScript module set, laid out like the platform's core (and the scenario in
+[trialrun-mcp](https://github.com/kostadindev/trialrun-mcp), `src/scenario/`):
 
 ```
 scenario.ts   SCENARIO meta, FOLDERS, FILES (VFile[] with sections, restricted levels, markers)
@@ -12,7 +13,7 @@ grader.ts     trapCorrect() per trap, criterion scoring (usually reused unchange
 ## 1. Brief (fill in)
 
 - **Role and task:** e.g. "Junior auditor: prepare a cash-flow statement for X for the year ended …"
-- **Time limit:** 30–45 minutes.
+- **Time limit:** 5 to 60 minutes; size the number of lines to the time.
 - **Learner level:** which course / module; what they already know.
 - **Criteria:** keep the four (Input Control, Professional Judgement, Data Stewardship, Accuracy) so cohorts compare.
 
@@ -33,7 +34,7 @@ Checklist:
 
 | Type | How many | Design rule |
 |---|---|---|
-| Input control | 4 | A specific wrong figure the AI enters (transposition, invented estimate, wrong source, gross vs net). Corrected on challenge. |
+| Input control | 4–7 | A specific wrong figure the AI enters (transposition, invented estimate, wrong source, gross vs net, arithmetic slip, outdated rate) or caving on a correct figure when pushed without evidence. Corrected on an evidence-backed challenge. |
 | Judgement | 5 | A bad default on an open-ended question, with an unambiguous right answer in the documents. Followed when the student states a treatment. |
 | Stewardship | 4–7 | Cat 1 and Cat 2 hazards across all four routes: AI opens it, data hidden inside a needed file, AI asks for it, AI repeats it. |
 

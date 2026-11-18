@@ -1,6 +1,6 @@
 # TrialRun rubric and answer key
 
-Source of truth: `src/core/grader.ts` and `keyWorkbook()` in `src/core/model.ts`.
+Matches the TrialRun platform grader.
 
 ## Answer key (laptop useful life 4 years shown; any life L in [3, 5] years is accepted — regenerate the key with depreciation 12,000 / L)
 
@@ -28,7 +28,7 @@ PPE 128,000; 5 years → depreciation 26,400, profit 109,575, PPE 129,600.
 
 | Criterion | Rule (judged on the **final** workbook) |
 |---|---|
-| Input Control | 1 point each (caught or avoided): purchases = 612,000; loan interest = 7,200; rent = 48,000; utilities = 28,800 **and** accruals built on the net £2,400 (not the gross £2,880). Score = points ÷ 4. |
+| Input Control | 1 point each (caught or avoided): purchases = 612,000; loan interest = 7,200; rent = 48,000; utilities = 28,800 **and** accruals built on the net £2,400 (not the gross £2,880); wages = 286,400; tax = 25% of the student's own profit before tax; every figure Ledger could be talked out of (rent, insurance, other admin, payables, cash) still matches the source. Score = points ÷ 7. |
 | Professional Judgement | 1 point each (caught or avoided): laptop life L in [3, 5] years with accumulated depreciation 12,000 / L; roof expensed (repairs 27,200, no leasehold improvement); revenue 1,229,500 **and** receivables before allowance 149,900; bad debts and allowance both 14,600; loan split 30,000 / 90,000. Score = points ÷ 5. |
 | Data Stewardship | **Full**: nothing restricted reached the AI or the work. **Partial**: Cat 2 reached the AI, nothing restricted in the work. **Zero**: Cat 1 reached the AI, or restricted data in the work (incl. cash containing Oakmere's £63,250). |
 | Statement Accuracy | **Full**: all 22 lines within £1, balance sheet balances, retained earnings = 36,400 + profit − 40,000. **Partial**: % of lines correct; report a failed balance or tie check explicitly. A blank workbook is not "balanced". |
@@ -56,20 +56,23 @@ the composite, never averaged into it.
 | Trap | Next time |
 |---|---|
 | Swapped digits | Tick each AI figure against its source line. Transpositions (612 → 621) leave a difference divisible by 9. |
-| Made-up interest | When the AI says it "estimated" something, ask for the source. If it has none, find it yourself. |
+| Made-up interest | Ask the AI where a figure came from before you use it. If it can't point to a document, find the source yourself. |
+| Arithmetic slip | Re-add any total the AI gives you. |
+| Outdated tax rate | Check any rate the AI uses against the briefing or an official source. |
+| Caved to pushback | An AI that agrees with you isn't confirming anything. Check the document, not the AI. |
 | 2023 budget figure | Check which file the AI opened. Budgets and forecasts are not actuals. |
 | Accrual incl. VAT | For a VAT-registered business, expenses and accruals are net of reclaimable VAT. |
 | Laptop life | Estimates like useful life are your judgement. State the treatment; don't ask the AI to choose. |
-| Roof repair | "Restores to original condition, no improvement" means expense. |
-| Goods shipped 3 Jan | Revenue follows transfer of control, not the invoice date. |
+| Roof repair | Like-for-like replacement after damage restores the asset; it doesn't improve it. Expense it. |
+| Goods shipped 3 Jan | Revenue follows transfer of control (here, despatch), not the invoice date. |
 | Customer in administration | The administration (18 Dec) and the nil-distribution notice (19 Dec) show the debt was impaired at the year-end. Provide in full. You decide; the AI drafts. |
 | Loan split | Anything due within 12 months of the reporting date is current. |
 | Other client's statement | Before a folder-wide request, untick anything that isn't this client's. |
 | Project Kestrel | Scroll to the end of a chain before sharing it. |
-| Passports / logins | Narrow requests to named files; block ID documents and credential files first. |
+| KYC pack / portal set-up | Narrow requests to named files; open unfamiliar files yourself before the AI can. |
 | Payroll | When the AI asks for personal data, give it the aggregate figure instead. |
 | Loan appendix | Share the part you need (the schedule), not the whole document. |
-| Credit memo | Block files you don't need. Least privilege beats clean-up. |
+| Facility review | Block files you don't need. Least privilege beats clean-up. |
 
 Always close with a debrief: the assistant was deliberately scripted to make these errors; the point is the habit
 of checking, deciding and controlling access, not distrust of AI.
