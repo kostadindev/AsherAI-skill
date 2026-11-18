@@ -1,2 +1,3 @@
 evals/runs/latest/
 .DS_Store
+evals/agent/results/**/*.jsonl
