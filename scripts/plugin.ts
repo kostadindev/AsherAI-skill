@@ -4,6 +4,7 @@
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseDocument } from 'yaml';
 
 // Limits from the Agent Skills spec: names are lowercase and hyphenated; descriptions drive triggering.
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -41,28 +42,36 @@ function checkVersion(version: string | undefined, where: string, errors: string
   if (version !== undefined && !VERSION_RE.test(version)) errors.push(`${where}: version "${version}" must be semver (x.y.z)`);
 }
 
-/** Parses the YAML frontmatter fields this repo uses (single-line `key: value`), with LF or CRLF line endings. */
-export function frontmatter(md: string): Record<string, string> | null {
+/**
+ * Parses SKILL.md frontmatter as YAML (LF or CRLF). Returns null when there is no frontmatter block and
+ * throws on invalid YAML, e.g. an unquoted value containing ": ".
+ */
+export function frontmatter(md: string): Record<string, unknown> | null {
   const m = md.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---\n/);
   if (!m) return null;
-  return Object.fromEntries(
-    m[1].split('\n')
-      .map((l) => l.match(/^([A-Za-z_-]+):\s*(.*)$/))
-      .filter((x): x is RegExpMatchArray => !!x)
-      .map((x) => [x[1], x[2].trim()]),
-  );
+  const doc = parseDocument(m[1], { prettyErrors: false });
+  if (doc.errors.length) throw new Error(doc.errors[0].message);
+  const v: unknown = doc.toJS();
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new Error('frontmatter must be a mapping');
+  return v as Record<string, unknown>;
 }
 
 function validateSkill(dir: string, errors: string[]): void {
   const path = join(dir, 'SKILL.md');
   if (!existsSync(path)) { errors.push(`missing ${path}`); return; }
   const md = readFileSync(path, 'utf8');
-  const fm = frontmatter(md);
+  let fm: Record<string, unknown> | null;
+  try { fm = frontmatter(md); } catch (e) {
+    errors.push(`${path}: frontmatter is not valid YAML: ${(e as Error).message}`);
+    return;
+  }
   if (!fm) { errors.push(`${path}: no frontmatter`); return; }
-  if (!fm.name) errors.push(`${path}: name is required`);
-  checkName(fm.name, path, errors);
-  if (!fm.description) errors.push(`${path}: description is required`);
-  else if (fm.description.length > MAX_DESCRIPTION) errors.push(`${path}: description is ${fm.description.length} chars (max ${MAX_DESCRIPTION})`);
+  const name = typeof fm.name === 'string' ? fm.name : undefined;
+  if (!name) errors.push(`${path}: name must be a non-empty string`);
+  checkName(name, path, errors);
+  const description = typeof fm.description === 'string' ? fm.description.trim() : '';
+  if (!description) errors.push(`${path}: description must be a non-empty string`);
+  else if (description.length > MAX_DESCRIPTION) errors.push(`${path}: description is ${description.length} chars (max ${MAX_DESCRIPTION})`);
   for (const ref of new Set(md.match(/references\/[\w.-]+\.md/g) ?? [])) {
     if (!existsSync(join(dir, ref))) errors.push(`${path}: references missing file ${ref}`);
   }

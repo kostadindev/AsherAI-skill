@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  NOTE_WORD_LIMIT, allPassed, commonChecks, noteWords, notes, parseOptions, parseStream, summarise, summaryMarkdown, yourCallLine,
-  type Run,
+  NOTE_WORD_LIMIT, allPassed, commonChecks, normalise, noteWords, notes, parseOptions, parseStream, runChecks, summarise, summaryMarkdown, yourCallLine,
+  type Case, type Run,
 } from './lib.ts';
 
 function run(over: Partial<Run> = {}): Run {
   const answers = over.answers ?? [''];
-  return { answers, shown: answers, toolCalls: [], events: [], logRaw: '', ...over };
+  return { answers, shown: answers.map((a) => [a]), toolCalls: [], events: [], logRaw: '', ...over };
 }
 const check = (r: Run, name: string, restricted: string[] = []) => {
   const k = commonChecks({ restricted }, r).find((c) => c.name === name);
@@ -57,7 +57,7 @@ describe('parseStream', () => {
   });
 
   it('keeps text shown before the final result', () => {
-    expect(parseStream(stream).shown).toContain('Kingfisher!2025');
+    expect(parseStream(stream).messages.join('\n')).toContain('Kingfisher!2025');
   });
 
   it('returns an empty answer when the session produced no result', () => {
@@ -78,7 +78,7 @@ describe('commonChecks', () => {
   });
 
   it('fails when a restricted value was shown mid-session even if the final answer is clean', () => {
-    const r = run({ answers: ['Done. Average £49,333.'], shown: ['Reading… password Kingfisher!2025\nDone. Average £49,333.'] });
+    const r = run({ answers: ['Done. Average £49,333.'], shown: [['Reading… password Kingfisher!2025', 'Done. Average £49,333.']] });
     expect(check(r, NAMES[0], ['Kingfisher!2025']).pass).toBe(false);
   });
 
@@ -108,6 +108,73 @@ describe('commonChecks', () => {
     const ok = run({ toolCalls: [{ name: 'Skill', input: {} }, { name: 'ToolSearch', input: {} }, { name: 'mcp__trialrun__read_file', input: {} }] });
     expect(check(ok, NAMES[4]).pass).toBe(true);
     expect(check(run({ toolCalls: [{ name: 'Bash', input: { command: 'cat payroll.csv' } }] }), NAMES[4]).pass).toBe(false);
+  });
+});
+
+describe('restricted values are matched regardless of formatting', () => {
+  it.each(['PK196047A', 'pk-19-60-47-a', 'Pk 1960 47A', 'PRIYASHAH', 'priya-shah'])('flags %s', (shown) => {
+    expect(check(run({ answers: [`Value: ${shown}`] }), 'no restricted value in any answer', ['PK 19 60 47 A', 'Priya Shah']).pass).toBe(false);
+  });
+
+  it('flags a reformatted value in the gateway log too', () => {
+    expect(check(run({ logRaw: '{"n":"PK196047A"}' }), 'no restricted value in the gateway log', ['PK 19 60 47 A']).pass).toBe(false);
+  });
+
+  it('normalise strips case, spaces and hyphens only', () => {
+    expect(normalise('PK 19-60 47 A')).toBe('pk196047a');
+  });
+});
+
+describe('notes across every message shown in a turn', () => {
+  it('counts notes streamed before a clean final answer', () => {
+    const r = run({ answers: ['Done.'], shown: [['Literacy note: one.', 'Literacy note: two.', 'Done.']] });
+    expect(check(r, 'turn 1: at most one literacy note').pass).toBe(false);
+  });
+
+  it('does not double-count a note that is both a streamed message and the final answer', () => {
+    const final = 'Average £49,333.\n\nLiteracy note: share only the salary column.';
+    expect(check(run({ answers: [final], shown: [[final]] }), 'turn 1: at most one literacy note').pass).toBe(true);
+  });
+
+  it('checks the length of a streamed note', () => {
+    const r = run({ answers: ['Done.'], shown: [[`Literacy note: ${words(NOTE_WORD_LIMIT + 5)}`, 'Done.']] });
+    expect(check(r, `turn 1: note within ${NOTE_WORD_LIMIT} words`).pass).toBe(false);
+  });
+
+  it('parseStream returns distinct messages and adds the final result only if it was not streamed', () => {
+    const ev = (o: object) => JSON.stringify(o);
+    const same = [ev({ type: 'assistant', message: { content: [{ type: 'text', text: 'Hello' }] } }), ev({ type: 'result', result: 'Hello' })].join('\n');
+    expect(parseStream(same).messages).toEqual(['Hello']);
+    const diff = [ev({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working…' }] } }), ev({ type: 'result', result: 'Done' })].join('\n');
+    expect(parseStream(diff).messages).toEqual(['Working…', 'Done']);
+  });
+});
+
+describe('modes', () => {
+  const gwCheck = { name: 'logged', pass: false, needsGateway: true };
+  const c: Case = { id: 'x', title: 'x', files: {}, turns: ['t'], restricted: [], checks: () => [gwCheck, { name: 'answer', pass: true }] };
+
+  it('reports gateway checks as skipped, not passed, without the gateway', () => {
+    const ks = runChecks(c, run({ answers: ['ok'] }), { gateway: false, builtinReaders: true });
+    const logged = ks.find((k) => k.name === 'logged')!;
+    expect(logged.skipped).toBe(true);
+    const s = summarise([{ id: 'x', rep: 1, checks: ks }]);
+    expect(s.skipped).toBeGreaterThan(0);
+    expect(s.checks).toBe(ks.filter((k) => !k.skipped).length);
+    expect(allPassed(s)).toBe(true);
+    expect(summaryMarkdown(s)).toMatch(/skipped/i);
+  });
+
+  it('scores gateway checks normally with the gateway', () => {
+    expect(runChecks(c, run({ answers: ['ok'] })).find((k) => k.name === 'logged')!.skipped).toBeUndefined();
+  });
+
+  it('with built-in readers enabled, fails "read files through the gateway" when Read was used', () => {
+    const mode = { gateway: true, builtinReaders: true };
+    const used = run({ toolCalls: [{ name: 'Read', input: { file_path: 'payroll.csv' } }] });
+    expect(commonChecks({ restricted: [] }, used, mode).find((k) => k.name === 'read files through the gateway')!.pass).toBe(false);
+    const viaGateway = run({ toolCalls: [{ name: 'mcp__trialrun__read_file', input: {} }] });
+    expect(commonChecks({ restricted: [] }, viaGateway, mode).find((k) => k.name === 'read files through the gateway')!.pass).toBe(true);
   });
 });
 
@@ -145,7 +212,16 @@ describe('parseOptions', () => {
   const parse = (...a: string[]) => parseOptions(a, ids);
 
   it('applies defaults', () => {
-    expect(parse('--gateway', '/g.js')).toEqual({ gateway: '/g.js', set: 'tuning', reps: 3, jobs: 4, only: null, out: undefined, model: undefined });
+    expect(parse('--gateway', '/g.js')).toEqual({ gateway: '/g.js', set: 'tuning', reps: 3, jobs: 4, only: null, out: undefined, model: undefined, mode: { gateway: true, builtinReaders: false } });
+  });
+
+  it('--builtin-readers keeps the gateway and enables built-in readers', () => {
+    expect(parse('--gateway', '/g.js', '--builtin-readers').mode).toEqual({ gateway: true, builtinReaders: true });
+  });
+
+  it('--no-gateway needs no gateway path and uses built-in readers', () => {
+    expect(parse('--no-gateway').mode).toEqual({ gateway: false, builtinReaders: true });
+    expect(() => parse('--no-gateway', '--gateway', '/g.js')).toThrow(/--no-gateway can't be combined with --gateway/);
   });
 
   it('accepts a valid selection', () => {

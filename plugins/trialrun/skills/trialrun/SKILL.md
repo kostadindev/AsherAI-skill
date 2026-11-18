@@ -43,6 +43,8 @@ How to coach:
   conversation (what they checked or didn't, decisions they kept or handed over, data they shared), then two
   lines labelled exactly `Habit to keep:` and `Habit to build:`. Quote their own actions; do not score them
   unless they ask.
+- **If the TrialRun gateway is connected, read the user's files through it** (`list_files`, `read_file`), never
+  with built-in file tools such as Read, Glob or Grep, so every read is logged and checked.
 - If the TrialRun gateway is connected, log each coaching moment with `record_moment` (habit `check`, `decide`
   or `protect`; outcome `did`, `prompted` or `missed`; a short note with no restricted data), and use
   `get_report` for the reflection.

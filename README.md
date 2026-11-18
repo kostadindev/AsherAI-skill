@@ -31,6 +31,7 @@ Or copy the skill folder by hand:
 
 ```bash
 git clone https://github.com/kostadindev/trialrun-skill
+mkdir -p ~/.claude/skills
 cp -R trialrun-skill/plugins/trialrun/skills/trialrun ~/.claude/skills/trialrun
 ```
 
@@ -48,9 +49,14 @@ Example note: `Literacy note: only the salary column was needed. Next time, dele
 ## With trialrun-mcp
 
 **Coach mode** works on its own. With the [trialrun-mcp](https://github.com/kostadindev/trialrun-mcp) gateway
-pointed at your folder, Claude reads your files through it, so every read is logged and restricted data is
-detected; the skill records each coaching moment in the gateway's habit log, and your reflection draws on the
-gateway's report, which keeps labels only, never raw values:
+pointed at your folder, the skill tells Claude to read your files through it, so those reads are logged and
+restricted data is detected; it records each coaching moment in the gateway's habit log, and your reflection
+draws on the gateway's report, which keeps labels only, never raw values.
+
+The gateway sees only what goes through it. The skill instructs Claude not to use built-in file tools while the
+gateway is connected, but Claude Code doesn't enforce that. To guarantee every read is logged, also disallow
+Read, Glob and Grep in your Claude Code permissions. Text you paste into the chat is only checked if Claude calls
+the gateway's `check_text`.
 
 ```bash
 claude mcp add trialrun -e TRIALRUN_WORKSPACE=/path/to/folder -- npx -y github:kostadindev/trialrun-mcp
@@ -84,6 +90,8 @@ agent cases yet. Details, every check and every change to the checks: [`evals/ag
 npm install
 npm run check        # typecheck, unit tests (a failing fixture for every case check), plugin validation; runs in CI
 npm run agent -- --gateway /abs/path/trialrun-mcp/dist/server.js   # live agent runs (manual; needs Claude Code)
+npm run agent -- --gateway /abs/path/trialrun-mcp/dist/server.js --builtin-readers   # readers enabled: does it still use the gateway?
+npm run agent -- --no-gateway                                                      # coach mode without the gateway
 ```
 
 | Path | What it holds |

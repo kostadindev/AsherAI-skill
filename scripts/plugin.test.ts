@@ -72,6 +72,18 @@ describe('validate', () => {
     expect(validate(dir).join('\n')).toMatch(/references missing file references\/missing\.md/);
   });
 
+  it('rejects frontmatter that is not valid YAML', () => {
+    const dir = copy();
+    editText(dir, SKILL, (t) => t.replace(/^description: .*$/m, 'description: Example: nested colon'));
+    expect(validate(dir).join('\n')).toMatch(/frontmatter is not valid YAML/);
+  });
+
+  it('rejects a description that is not a string', () => {
+    const dir = copy();
+    editText(dir, SKILL, (t) => t.replace(/^description: .*$/m, 'description: [a, b]'));
+    expect(validate(dir).join('\n')).toMatch(/description must be a non-empty string/);
+  });
+
   it('reports an invalid skill name', () => {
     const dir = copy();
     editText(dir, SKILL, (t) => t.replace(/^name: .*$/m, 'name: Trial Run'));
@@ -80,9 +92,15 @@ describe('validate', () => {
 });
 
 describe('frontmatter', () => {
-  it('reads single-line fields with LF or CRLF and rejects files without frontmatter', () => {
+  it('parses YAML with LF or CRLF, including quoted and folded strings', () => {
     expect(frontmatter('---\nname: a\ndescription: b c\n---\nbody')).toEqual({ name: 'a', description: 'b c' });
     expect(frontmatter('---\r\nname: a\r\n---\r\nbody')).toEqual({ name: 'a' });
+    expect(frontmatter('---\ndescription: "Use: when asked"\n---\n')).toEqual({ description: 'Use: when asked' });
+    expect(frontmatter('---\ndescription: >\n  two\n  lines\n---\n')).toEqual({ description: 'two lines\n' });
+  });
+
+  it('returns null without frontmatter and throws on invalid YAML', () => {
     expect(frontmatter('no frontmatter')).toBeNull();
+    expect(() => frontmatter('---\ndescription: Example: nested colon\n---\n')).toThrow();
   });
 });

@@ -1,11 +1,17 @@
 /**
  * Runs the agent cases through real `claude -p` sessions and scores them.
  *
- *   npm run agent -- --gateway /abs/path/trialrun-mcp/dist/server.js [--set tuning|heldout] [--reps 3] [--jobs 4] [--only id,id] [--model id] [--out dir]
+ *   npm run agent -- --gateway /abs/path/trialrun-mcp/dist/server.js [--builtin-readers] [--set tuning|heldout]
+ *                    [--reps 3] [--jobs 4] [--only id,id] [--model id] [--out dir]
+ *   npm run agent -- --no-gateway [...]
  *
- * Needs a signed-in Claude Code CLI, so it runs manually, not in CI. Each run gets a fresh temp workspace,
- * a fresh project with the skill installed, and the gateway connected over MCP. Built-in file tools are
- * disabled so every read goes through the gateway. Exits non-zero if any check fails or any run errors.
+ * Modes: by default built-in file tools are disabled, so every read goes through the gateway.
+ * --builtin-readers leaves Read/Glob/Grep enabled and checks the skill still reads through the gateway.
+ * --no-gateway runs coach mode alone: files sit in the project, gateway-dependent checks are skipped
+ * (reported, not passed) and cases that need the gateway are left out.
+ *
+ * Needs a signed-in Claude Code CLI, so it runs manually, not in CI. Exits 2 on bad options, 1 if any check
+ * fails or any run errors, 0 only when every run passes.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,35 +28,40 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../..');
 const SKILL = join(repoRoot, 'plugins/trialrun/skills/trialrun');
-const DISALLOWED = 'Read,Bash,Grep,Glob,Write,Edit,MultiEdit,NotebookEdit,WebSearch,WebFetch,Task,Agent';
+const READERS = ['Read', 'Glob', 'Grep'];
+const ALWAYS_DISALLOWED = ['Bash', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebSearch', 'WebFetch', 'Task', 'Agent'];
 const TURN_TIMEOUT_MS = 240_000;
 
 let opts: Options;
 try {
   opts = parseOptions(process.argv.slice(2), { tuning: CASES.map((c) => c.id), heldout: HELDOUT.map((c) => c.id) });
-  if (!existsSync(opts.gateway)) throw new Error(`gateway not found: ${opts.gateway}`);
+  if (opts.gateway && !existsSync(opts.gateway)) throw new Error(`gateway not found: ${opts.gateway}`);
 } catch (e) {
   console.error((e as Error).message);
   process.exit(2);
 }
+const { mode } = opts;
 const outDir = resolve(opts.out ?? join(here, 'results', new Date().toISOString().replace(/[:.]/g, '-')));
 mkdirSync(outDir, { recursive: true });
 
-/** Output of a command, or a marker when it can't be run (e.g. not a git checkout). */
+/** Output of a command, or 'unknown' when it can't be run (e.g. not a git checkout). */
 function capture(cmd: string, args: string[], cwd?: string): string {
   try { return execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return 'unknown'; }
 }
-const gitRevision = (dir: string) => {
+function gitRevision(dir: string): string {
   const rev = capture('git', ['rev-parse', '--short', 'HEAD'], dir);
   const dirty = capture('git', ['status', '--porcelain'], dir);
   return rev === 'unknown' ? rev : `${rev}${dirty && dirty !== 'unknown' ? '-dirty' : ''}`;
-};
+}
 
 interface TurnOutput { stdout: string; error?: string }
 
 function claude(cwd: string, prompt: string, continueSession: boolean): Promise<TurnOutput> {
-  const a = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--mcp-config', 'mcp.json',
-    '--allowedTools', 'mcp__trialrun__*,Skill', '--disallowedTools', DISALLOWED];
+  const allowed = [...(mode.gateway ? ['mcp__trialrun__*'] : []), 'Skill', ...(mode.builtinReaders ? READERS : [])];
+  const disallowed = [...ALWAYS_DISALLOWED, ...(mode.builtinReaders ? [] : READERS)];
+  const a = ['-p', prompt, '--output-format', 'stream-json', '--verbose',
+    '--allowedTools', allowed.join(','), '--disallowedTools', disallowed.join(',')];
+  if (mode.gateway) a.push('--mcp-config', 'mcp.json');
   if (opts.model) a.push('--model', opts.model);
   if (continueSession) a.splice(1, 0, '--continue');
   return new Promise((done) => {
@@ -72,10 +83,11 @@ function claude(cwd: string, prompt: string, continueSession: boolean): Promise<
 }
 
 function transcript(c: Case, rep: number, run: Run, checks: Check[], root: string): string {
+  const mark = (k: Check) => (k.skipped ? 'SKIP' : k.pass ? 'PASS' : 'FAIL');
   const body = [
     `# ${c.title} (rep ${rep})`,
     ...run.answers.map((a, i) => `## Turn ${i + 1}\n\n${a}`),
-    `## Checks\n\n${checks.map((k) => `- ${k.pass ? 'PASS' : 'FAIL'} ${k.name}${k.detail ? ` (${k.detail})` : ''}`).join('\n')}`,
+    `## Checks\n\n${checks.map((k) => `- ${mark(k)} ${k.name}${k.detail ? ` (${k.detail})` : ''}`).join('\n')}`,
     `## Tool calls\n\n${run.toolCalls.map((t) => `- ${t.name} ${JSON.stringify(t.input).slice(0, 160)}`).join('\n')}`,
   ].join('\n\n');
   // Published transcripts must not carry local paths.
@@ -84,70 +96,99 @@ function transcript(c: Case, rep: number, run: Run, checks: Check[], root: strin
 
 const models = new Set<string>();
 
+/** Prepares a fresh workspace (and project), runs every turn and scores the run. Throws on unexpected failures. */
+async function execute(c: Case, rep: number, root: string): Promise<CaseResult> {
+  const proj = join(root, 'proj');
+  // Without the gateway the agent reads the files directly from its project folder.
+  const ws = mode.gateway ? join(root, 'work') : proj;
+  mkdirSync(join(proj, '.claude', 'skills'), { recursive: true });
+  mkdirSync(ws, { recursive: true });
+  for (const [f, body] of Object.entries(c.files)) writeFileSync(join(ws, f), body);
+  cpSync(SKILL, join(proj, '.claude', 'skills', 'trialrun'), { recursive: true });
+  if (mode.gateway) {
+    if (c.policy) writeFileSync(join(ws, '.trialrun.json'), JSON.stringify(c.policy, null, 2));
+    writeFileSync(join(proj, 'mcp.json'), JSON.stringify({ mcpServers: { trialrun: { command: 'node', args: [opts.gateway], env: { TRIALRUN_WORKSPACE: ws } } } }));
+  }
+
+  const run: Run = { answers: [], shown: [], toolCalls: [], events: [], logRaw: '' };
+  for (const [i, turn] of c.turns.entries()) {
+    const out = await claude(proj, turn, i > 0);
+    writeFileSync(join(outDir, `${c.id}.r${rep}.t${i + 1}.jsonl`), out.stdout); // local only; git-ignored
+    if (out.error) return { id: c.id, rep, checks: [], error: `turn ${i + 1}: ${out.error}` };
+    const parsed = parseStream(out.stdout);
+    if (parsed.model) models.add(parsed.model);
+    if (parsed.resultError || !parsed.answer) return { id: c.id, rep, checks: [], error: `turn ${i + 1}: session ended without a result` };
+    run.answers.push(parsed.answer);
+    run.shown.push(parsed.messages);
+    run.toolCalls.push(...parsed.toolCalls);
+  }
+  const log = join(ws, '.trialrun-session.json');
+  if (mode.gateway && existsSync(log)) {
+    run.logRaw = readFileSync(log, 'utf8');
+    run.events = (JSON.parse(run.logRaw) as { events?: Record<string, unknown>[] }).events ?? [];
+  }
+  const checks = runChecks(c, run, mode);
+  writeFileSync(join(outDir, `${c.id}.r${rep}.md`), transcript(c, rep, run, checks, root));
+  return { id: c.id, rep, checks };
+}
+
+/** Any exception in one run becomes that run's infrastructure error, so other runs still count. */
 async function runCase(c: Case, rep: number): Promise<CaseResult> {
   const root = mkdtempSync(join(tmpdir(), `trialrun-${c.id}-`));
   try {
-    const ws = join(root, 'work');
-    const proj = join(root, 'proj');
-    mkdirSync(ws);
-    mkdirSync(join(proj, '.claude', 'skills'), { recursive: true });
-    for (const [f, body] of Object.entries(c.files)) writeFileSync(join(ws, f), body);
-    if (c.policy) writeFileSync(join(ws, '.trialrun.json'), JSON.stringify(c.policy, null, 2));
-    cpSync(SKILL, join(proj, '.claude', 'skills', 'trialrun'), { recursive: true });
-    writeFileSync(join(proj, 'mcp.json'), JSON.stringify({ mcpServers: { trialrun: { command: 'node', args: [opts.gateway], env: { TRIALRUN_WORKSPACE: ws } } } }));
-
-    const run: Run = { answers: [], shown: [], toolCalls: [], events: [], logRaw: '' };
-    for (const [i, turn] of c.turns.entries()) {
-      const out = await claude(proj, turn, i > 0);
-      writeFileSync(join(outDir, `${c.id}.r${rep}.t${i + 1}.jsonl`), out.stdout); // local only; git-ignored
-      if (out.error) return { id: c.id, rep, checks: [], error: `turn ${i + 1}: ${out.error}` };
-      const parsed = parseStream(out.stdout);
-      if (parsed.model) models.add(parsed.model);
-      if (parsed.resultError || !parsed.answer) return { id: c.id, rep, checks: [], error: `turn ${i + 1}: session ended without a result` };
-      run.answers.push(parsed.answer);
-      run.shown.push(parsed.shown);
-      run.toolCalls.push(...parsed.toolCalls);
-    }
-    const log = join(ws, '.trialrun-session.json');
-    if (existsSync(log)) {
-      run.logRaw = readFileSync(log, 'utf8');
-      run.events = (JSON.parse(run.logRaw) as { events?: Record<string, unknown>[] }).events ?? [];
-    }
-    const checks = runChecks(c, run);
-    writeFileSync(join(outDir, `${c.id}.r${rep}.md`), transcript(c, rep, run, checks, root));
-    return { id: c.id, rep, checks };
+    return await execute(c, rep, root);
+  } catch (e) {
+    return { id: c.id, rep, checks: [], error: `unexpected: ${(e as Error).message}` };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-const cases = (opts.set === 'heldout' ? HELDOUT : CASES).filter((c) => !opts.only || opts.only.includes(c.id));
-const queue = cases.flatMap((c) => Array.from({ length: opts.reps }, (_, r) => () => runCase(c, r + 1)));
-const startedAt = new Date().toISOString();
+const set = opts.set === 'heldout' ? HELDOUT : CASES;
+const selected = set.filter((c) => !opts.only || opts.only.includes(c.id));
+const excluded = mode.gateway ? [] : selected.filter((c) => c.requiresGateway).map((c) => c.id);
+const cases = selected.filter((c) => !excluded.includes(c.id));
+if (!cases.length) {
+  console.error(`no cases to run${excluded.length ? ` (${excluded.join(', ')} need the gateway)` : ''}`);
+  process.exit(2);
+}
+if (excluded.length) console.log(`Left out without the gateway: ${excluded.join(', ')}`);
+
+const meta = {
+  startedAt: new Date().toISOString(),
+  set: opts.set,
+  reps: opts.reps,
+  mode,
+  excludedCases: excluded,
+  claudeCli: capture('claude', ['--version']),
+  skillRevision: gitRevision(repoRoot),
+  gatewayRevision: opts.gateway ? gitRevision(dirname(resolve(opts.gateway))) : 'none',
+  node: process.version,
+};
 const results: CaseResult[] = [];
+
+/** Rewritten after every run, so completed results survive anything that happens later. */
+function persist(): void {
+  const summary = summarise(results);
+  const header = `Mode: ${mode.gateway ? (mode.builtinReaders ? 'gateway + built-in readers' : 'gateway only') : 'no gateway'}.`;
+  const footer = `Model: ${[...models].join(', ') || 'unknown'}. Claude Code ${meta.claudeCli}. Skill ${meta.skillRevision}, gateway ${meta.gatewayRevision}.`;
+  writeFileSync(join(outDir, 'summary.md'), `${header}\n\n${summaryMarkdown(summary)}\n${footer}\n`);
+  writeFileSync(join(outDir, 'results.json'), JSON.stringify({ meta: { ...meta, models: [...models] }, results }, null, 2));
+}
+
+const queue = cases.flatMap((c) => Array.from({ length: opts.reps }, (_, r) => () => runCase(c, r + 1)));
 let next = 0;
 await Promise.all(Array.from({ length: opts.jobs }, async () => {
   while (next < queue.length) {
     const r = await queue[next++]();
     results.push(r);
-    const failed = r.checks.filter((k) => !k.pass);
+    persist();
+    const failed = r.checks.filter((k) => !k.pass && !k.skipped);
     const status = r.error ? `ERROR ${r.error}` : failed.length ? `FAIL: ${failed.map((k) => k.name).join('; ')}` : 'pass';
     console.log(`${r.id} rep ${r.rep}: ${status}`);
   }
 }));
 
 const summary = summarise(results);
-const meta = {
-  startedAt,
-  set: opts.set,
-  reps: opts.reps,
-  models: [...models],
-  claudeCli: capture('claude', ['--version']),
-  skillRevision: gitRevision(repoRoot),
-  gatewayRevision: gitRevision(dirname(resolve(opts.gateway))),
-  node: process.version,
-};
-writeFileSync(join(outDir, 'summary.md'), `${summaryMarkdown(summary)}\nModel: ${meta.models.join(', ') || 'unknown'}. Claude Code ${meta.claudeCli}. Skill ${meta.skillRevision}, gateway ${meta.gatewayRevision}.\n`);
-writeFileSync(join(outDir, 'results.json'), JSON.stringify({ meta, results }, null, 2));
 console.log(`\n${summaryMarkdown(summary)}\nOutputs: ${outDir}`);
 process.exit(allPassed(summary) ? 0 : 1);
